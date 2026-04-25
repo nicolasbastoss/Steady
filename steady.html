@@ -536,13 +536,15 @@ const authTimeout = setTimeout(() => {
 }, 6000);
 
 onAuthStateChanged(auth, async (user) => {
-  clearTimeout(authTimeout);
-  if (user) {
+  if (user && !U) {
     U = user;
     await loadUserData();
-  } else {
+  } else if (!user) {
     document.getElementById('loading').style.display = 'none';
     showScreen('screen-auth');
+  }
+});
+
   }
 });
 
@@ -591,7 +593,45 @@ window.doAuth = async function() {
   const pw = document.getElementById('a-pw').value;
   const errEl = document.getElementById('auth-err');
   const btn = document.getElementById('auth-btn');
+
   if (!email || !pw) { showAuthErr('Please fill in all fields.'); return; }
+
+  btn.disabled = true;
+  errEl.style.display = 'none';
+
+  try {
+    let userCredential;
+
+    if (authMode === 'signup') {
+      const name = document.getElementById('a-name').value.trim() || 'User';
+      userCredential = await createUserWithEmailAndPassword(auth, email, pw);
+      await updateProfile(userCredential.user, { displayName: name });
+    } else {
+      userCredential = await signInWithEmailAndPassword(auth, email, pw);
+    }
+
+    // 🔥 FORCE LOAD USER DATA IMMEDIATELY
+    U = userCredential.user;
+    await loadUserData();
+
+  } catch(e) {
+    btn.disabled = false;
+    btn.textContent = authMode==='login' ? 'Log in' : 'Create account';
+
+    const msgs = {
+      'auth/invalid-email': 'Invalid email address.',
+      'auth/user-not-found': 'No account with that email.',
+      'auth/wrong-password': 'Incorrect password.',
+      'auth/email-already-in-use': 'Email already in use.',
+      'auth/weak-password': 'Password must be at least 6 characters.',
+      'auth/too-many-requests': 'Too many attempts. Try again later.',
+      'auth/invalid-credential': 'Email or password is incorrect.',
+    };
+
+    showAuthErr(msgs[e.code] || 'Something went wrong. Try again.');
+  }
+};
+
   btn.disabled = true; btn.textContent = authMode==='login' ? 'Logging in…' : 'Creating account…';
   errEl.style.display = 'none';
   try {
@@ -961,74 +1001,6 @@ document.querySelectorAll('.overlay').forEach(o => o.addEventListener('click', e
 
 // expose for inline onclick
 window.renderAnalytics = renderAnalytics;
-// ─────────────────────────────
-// 🔧 AUTH PATCH (ADD ONLY)
-// ─────────────────────────────
-
-// override broken doAuth safely
-window.doAuth = async function () {
-  const email = document.getElementById('a-email').value.trim();
-  const pw = document.getElementById('a-pw').value;
-  const name = document.getElementById('a-name')?.value.trim() || 'User';
-
-  const errEl = document.getElementById('auth-err');
-  const btn = document.getElementById('auth-btn');
-
-  if (!email || !pw) {
-    errEl.textContent = 'Please fill in all fields.';
-    errEl.style.display = 'block';
-    return;
-  }
-
-  btn.disabled = true;
-  btn.textContent = authMode === 'login' ? 'Logging in…' : 'Creating account…';
-  errEl.style.display = 'none';
-
-  try {
-    let userCredential;
-
-    if (authMode === 'signup') {
-      userCredential = await createUserWithEmailAndPassword(auth, email, pw);
-      await updateProfile(userCredential.user, { displayName: name });
-    } else {
-      userCredential = await signInWithEmailAndPassword(auth, email, pw);
-    }
-
-    // force state
-    U = userCredential.user;
-
-    // 🔥 ensure data loads no matter what
-    await loadUserData();
-
-  } catch (e) {
-    const msgs = {
-      'auth/invalid-email': 'Invalid email address.',
-      'auth/user-not-found': 'No account with that email.',
-      'auth/wrong-password': 'Incorrect password.',
-      'auth/email-already-in-use': 'Email already in use.',
-      'auth/weak-password': 'Password must be at least 6 characters.',
-      'auth/too-many-requests': 'Too many attempts. Try again later.',
-      'auth/invalid-credential': 'Email or password is incorrect.',
-    };
-
-    errEl.textContent = msgs[e.code] || 'Something went wrong.';
-    errEl.style.display = 'block';
-
-    btn.disabled = false;
-    btn.textContent = authMode === 'login' ? 'Log in' : 'Create account';
-  }
-};
-
-// ─────────────────────────────
-// 🔁 EXTRA SAFETY: FORCE AUTH LOAD
-// ─────────────────────────────
-
-onAuthStateChanged(auth, async (user) => {
-  if (user) {
-    U = user;
-    await loadUserData();
-  }
-});
 </script>
 
 </body>
